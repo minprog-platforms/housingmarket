@@ -69,7 +69,7 @@ class Household(Agent):
             
             if prob_buy > random.random():
                 #person will buy a house
-                self.buy_house()
+                self.make_offer_house(house= , price = )
             else:
                 cheapest_option = 100000000
                 self.type == 'renter'
@@ -80,19 +80,20 @@ class Household(Agent):
                 
                 self.rent_cheap()
         elif self.type == 'owner_occ':
-            prob_sell = 1 /12 * max(1/11 * (1 + len(self.model.sale_market)   ), 0)
+            prob_sell = 1 /12 * max(1/11 * (1 + len(self.model.sale_market)), 0)
 
             if prob_sell > random.random():
                 sell_price = math.exp(mark_up + math.log(average_sell_price) - log(1+ average_num_days_market) + np.random.random()) 
-                self.sell_house()
+                self.offer_house(self.house.offer_house(self.owned_houses[0],sell_price))
         elif self.type == 'investor':
             delta = 0.7
+
             exp_total_yield = price * (delta * expected_monthly_appreciation + ( 1- delta) * average_rental_yield) - monthly_mortgage
 
             prob_buy = 1 - (1 - sigma(exp_total_yield))**(1/12)
 
             if prob_buy > random.random():
-                self.buy_house()
+                self.make_offer_house()
             # Only if the houses are not rented out yet
 
             self.rent_house()
@@ -113,14 +114,14 @@ class Household(Agent):
     def offer_house(self, house, sell_price):
         self.model.sell_market[house] = [self.unique_id, sell_price]
 
-    def make_offer_house(self, house):
+    def make_offer_house(self, house, price):
         if self.model.sell_market[house][1] > self.wealth:
             pass
         else:
             id = house.owner_id
             for agent in self.model.household_agents:
                 if agent.unique_id == id:
-                    agent.offers[self.unique_id] = house
+                    agent.offers[house] = [self.unique_id, price]
 
 
     def find_agent(self, id):
@@ -129,19 +130,21 @@ class Household(Agent):
                 return agent
 
     def accept_offer(self):
-            
-            choice = random.choice(self.offers)
-            new_owner_id = choice[0]
-            house = choice[1]
-            self.find_agent(new_owner_id).owned_houses.append(house)
-            self.owned_houses.remove(house)
-            self.wealth = self.wealth + sell_price
-            self.find_agent(new_owner_id).wealth = self.find_agent(new_owner_id).wealth  - sell_price
-            house.owner_id = new_owner_id
 
+        choice = random.choice(self.offers)
+        house = choice.keys()
+        offer_id = choice[house][0]
+        sell_price = choice[house][1]
+        self.find_agent(offer_id).owned_houses.append(house)
+        self.owned_houses.remove(house)
+        self.wealth = self.wealth + sell_price
+        self.find_agent(offer_id).wealth = self.find_agent(offer_id).wealth  - sell_price
+        house.owner_id = offer_id
 
+        # Change house status based on person who bought it!
+        # And remove it from sell market :)
 
-
+        del self.model.sell_market[house]
 
 
 
@@ -193,7 +196,8 @@ class Housemarket(Model):
         # create M houses
         self.houses = housemaker(self,M)
         self.empty_houses = self.houses
-        self.model.sell_market = {}
+        self.sell_market = {}
+        self.rent_market = {}
 
 
             # create N households
