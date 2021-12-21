@@ -17,7 +17,7 @@ expected_monthly_appreciation = 0.02
 
 
 def sigma(x):
-    return 1 / 1 + math.exp(-x)
+    return 1 / (1 + math.exp(-x))
 
 
 def income_randomizer():
@@ -61,7 +61,7 @@ class Household(Agent):
         self.offers_rent = {}
 
     def step(self):
-        if self.type == "social":
+        if self.type[0] == "social":
 
             # desired housing expenditure p
             p = min(
@@ -76,28 +76,36 @@ class Household(Agent):
 
             list_of_potential_buy = self.house_buy_checker()
 
-            quality = list_of_potential_buy[0].quality
+            if list_of_potential_buy != None:
 
-            cost_rent = self.model.annual_rent(quality)
+                quality = list_of_potential_buy[0].quality
 
-            cost_buy = 12 * (
-                self.mortgage_payment() - p * expected_monthly_appreciation
-            )
+                cost_rent = self.model.annual_rent(quality) * (1 + 0.1)
 
-            prob_buy = sigma(cost_rent - cost_buy)
+                cost_buy = 12 * (
+                    self.mortgage_payment(list_of_potential_buy[0])
+                    - p * expected_monthly_appreciation
+                )
 
-            if prob_buy > random.random():
-                # person will buy a house
-                self.make_offer_house(house=0, price=0)
-            else:
-                cheapest_option = 100000000
-                for house in self.model.rent_market:
-                    for rent in house.rent:
-                        if rent < cheapest_option:
-                            cheapest_option = rent
-                            cheapest_house = house
-                if cheapest_option != 100000000:
-                    self.rent(cheapest_house, cheapest_option)
+                x = cost_rent - cost_buy
+                beta = 0.00001
+                prob_buy = sigma(beta * x)
+
+                if prob_buy > random.random():
+                    # person will buy a house
+                    self.make_offer_house(
+                        house=list_of_potential_buy[0],
+                        price=self.get_price(list_of_potential_buy[0]),
+                    )
+                else:
+                    cheapest_option = 100000000
+                    for house in self.model.rent_market:
+                        for rent in house.rent:
+                            if rent < cheapest_option:
+                                cheapest_option = rent
+                                cheapest_house = house
+                    if cheapest_option != 100000000:
+                        self.rent(cheapest_house, cheapest_option)
 
         elif self.type == "owner_occ":
             prob_sell = 1 / 12 * max(1 / 11 * (1 + len(self.model.sell_market)), 0)
@@ -137,6 +145,18 @@ class Household(Agent):
 
         # if self.offers_rent > 0:
         #     self.accept_rent_offer()
+
+    def get_price(self, house):
+        for selling_house in self.model.sell_market:
+            if house == selling_house:
+                value = self.model.sell_market[selling_house][1]
+        return value
+
+    def mortgage_payment(self, house):
+        for selling_house in self.model.sell_market:
+            if house == selling_house:
+                value = self.model.sell_market[selling_house][1]
+        return value / (30 * 12)
 
     def max_yield_star(self):
         pass
@@ -246,13 +266,10 @@ class Household(Agent):
         self.model.sell_market[house] = [self.unique_id, sell_price]
 
     def make_offer_house(self, house, price):
-        if self.model.sell_market[house][1] > self.wealth:
-            pass
-        else:
-            id = house.owner_id
-            for agent in self.model.household_agents:
-                if agent.unique_id == id:
-                    agent.offers[house] = [self.unique_id, price]
+        id = house.owner_id
+        for agent in self.model.household_agents:
+            if agent.unique_id == id:
+                agent.offers[house] = [self.unique_id, price]
 
     def find_agent(self, id):
         for agent in self.model.household_agents:
@@ -419,7 +436,7 @@ class Housemarket(Model):
                 else:
                     agent_type = "owner_occ"
             else:
-                agent_type = random.choices(["owner_occ", "social"], weights=[0.7, 0.3])
+                agent_type = random.choices(["owner_occ", "social"], weights=[0.4, 0.6])
 
             a = Household(
                 self.next_id(),
@@ -449,6 +466,7 @@ class Housemarket(Model):
         self.house_placer()
 
         self.house_assign()
+        self.owner_assign()
 
         for cell in self.cells:
             for house in cell.houses:
@@ -483,7 +501,10 @@ class Housemarket(Model):
                 elif house.location == "East" and house.size < 75:
                     house.quality = "D"
 
-        self.datacollector = DataCollector(agent_reporters={"Wealth": "wealth"})
+        self.datacollector = DataCollector(
+            model_reporters={"avg": average_sale_price},
+            agent_reporters={"Wealth": "wealth"},
+        )
 
     def step(self):
         self.datacollector.collect(self)
@@ -510,6 +531,11 @@ class Housemarket(Model):
             house = self.empty_houses.pop(0)
             agent.owned_houses.append(house)
 
+    def owner_assign(self):
+        for agent in self.household_agents:
+            for owned_house in agent.owned_houses:
+                owned_house.owner_id = agent.unique_id
+
     def annual_rent(self, quality):
         counter = 0
         total_rent = 0
@@ -520,7 +546,22 @@ class Housemarket(Model):
                     counter += 1
 
         total_rent = total_rent * 12
-        return total_rent / counter
+        if counter == 0:
+            return 12000
+        else:
+            return total_rent / counter
+
+
+def average_sale_price(model):
+    total_price = 0
+    total_sales = 0
+    for quality, prices in model.prev_sale_prices.items():
+        total_price += prices
+        total_sales += 1
+    if total_sales != 0:
+        return total_price / total_sales
+    else:
+        return 0
 
 
 def agent_portrayal(agent):
@@ -556,22 +597,14 @@ def agent_portrayal(agent):
 if __name__ in "__main__":
     width = 5
     height = 5
-    model = Housemarket(10, 100, 5, 5)
+    model = Housemarket(150, 2000, 5, 5)
     for i in range(100):
         model.step()
 
     agent_wealth = model.datacollector.get_agent_vars_dataframe()
+    avg_sell_price = model.datacollector.get_model_vars_dataframe()
     agent_wealth = agent_wealth["Wealth"].dropna()
-
-    end_wealth = agent_wealth.xs(99, level="Step")
-    print(end_wealth)
-    end_wealth.hist()
-    plt.savefig('agent_wealth.png')
-
-
-    
-
-
+    print(avg_sell_price)
 
     # grid = CanvasGrid(agent_portrayal, width, height, 500, 500)
     # chart = ChartModule([{"Label": "Average house prices", "Color" : "Black"}], data_collector_name='datacollector')
