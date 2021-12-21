@@ -3,7 +3,10 @@
 
 Housing market is a agent based model that aims to easily model different consumer behaviour patterns for a given house market.
 
-## How To Use
+## Table of contents
+- About
+- How To Use
+- Results
 
 ![Agent Code](/pictures/agent.png)
 
