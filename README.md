@@ -7,7 +7,19 @@ Housing market is a agent based model that aims to easily model different consum
 - About
 - How To Use
 - Results
+- Lincese
+- Sources
 
-![Agent Code](/pictures/agent.png)
+## About
+![Agent Code](/doc/agent.png)
 
-![Model Code](/pictures/model.png)
+![Model Code](/doc/model.png)
+
+## How to Use
+
+## Results
+
+## Lincese
+
+## Sources
+https://www.oecd.org/naec/ABM_housing_example_A_Carro.pdf
