@@ -5,4 +5,6 @@ Housing market is a agent based model that aims to easily model different consum
 
 ## How To Use
 
-![This is an image](/pictures/agent.png)
+![Agent Code](/pictures/agent.png)
+
+![Model Code](/pictures/model.png)
