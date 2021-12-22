@@ -7,7 +7,7 @@ from mesa.visualization.modules.CanvasGridVisualization import CanvasGrid
 from mesa.visualization.ModularVisualization import ModularServer
 import numpy as np
 from numpy.core.fromnumeric import mean
-from numpy.lib.function_base import average
+from numpy.lib.function_base import average, percentile
 from mesa.visualization.modules import ChartModule
 from mesa.datacollection import DataCollector
 from matplotlib import pyplot as plt
@@ -61,7 +61,7 @@ class Household(Agent):
         self.offers_rent = {}
 
     def step(self):
-        if self.type[0] == "social":
+        if self.type[0] == 'social':
 
             # desired housing expenditure p
             p = min(
@@ -82,21 +82,15 @@ class Household(Agent):
 
                 cost_rent = self.model.annual_rent(quality) * (1 + 0.1)
 
-                cost_buy = 12 * (
-                    self.mortgage_payment(list_of_potential_buy[0])
-                    - p * expected_monthly_appreciation
-                )
-
+                cost_buy = 12 * (self.mortgage_payment(list_of_potential_buy[0]) - p * expected_monthly_appreciation)
+                
                 x = cost_rent - cost_buy
                 beta = 0.00001
                 prob_buy = sigma(beta * x)
 
                 if prob_buy > random.random():
                     # person will buy a house
-                    self.make_offer_house(
-                        house=list_of_potential_buy[0],
-                        price=self.get_price(list_of_potential_buy[0]),
-                    )
+                    self.make_offer_house(house=list_of_potential_buy[0], price = self.get_price(list_of_potential_buy[0]))
                 else:
                     cheapest_option = 100000000
                     for house in self.model.rent_market:
@@ -118,33 +112,37 @@ class Household(Agent):
                     - math.log(1 + self.avg_day_on_market())
                 )
                 self.offer_house(self.owned_houses[0], sell_price)
-        # elif self.type == "investor":
-        #     delta = 0.7
+        elif self.type == "investor":
+            delta = 0.7
 
-        #     exp_total_yield = self.max_yield()
+            exp_total_yield = self.max_yield()
 
-        #     prob_buy = 1 - (1 - sigma(exp_total_yield)) ** (1 / 12)
+            prob_buy = 1 - (1 - sigma(exp_total_yield)) ** (1 / 12)
 
-        #     if prob_buy > random.random():
-        #         self.make_offer_house()
-        #     # Only if the houses are not rented out yet
+            if prob_buy > random.random():
+                self.make_offer_house()
+            # Only if the houses are not rented out yet
 
-        #     self.rent_house()
+            self.rent_house()
 
-        #     self.max_yield_star()
-        #     prob_sell = 1 - sigma(true_exp_yield) ** (1 / 12)
+            true_exp_yield = self.max_yield_star()
 
-        #     if prob_sell > random.random():
-        #         sell_price = math.exp(
-        #             math.log(self.average_sell_price())
-        #             - math.log(1 + self.avg_day_on_market())
-        #         )
+            prob_sell = 1 - sigma(true_exp_yield) ** (1 / 12)
 
-        # if self.offers > 0:
-        #     self.accept_sell_offer()
+            if prob_sell > random.random():
+                sell_price = math.exp(
+                    math.log(self.average_sell_price())
+                    - math.log(1 + self.avg_day_on_market())
+                )
 
-        # if self.offers_rent > 0:
-        #     self.accept_rent_offer()
+        if self.offers > 0:
+            self.accept_sell_offer()
+
+        if self.offers_rent > 0:
+            self.accept_rent_offer()
+
+
+        # change the number of days a house has been on the market
 
     def get_price(self, house):
         for selling_house in self.model.sell_market:
@@ -156,7 +154,7 @@ class Household(Agent):
         for selling_house in self.model.sell_market:
             if house == selling_house:
                 value = self.model.sell_market[selling_house][1]
-        return value / (30 * 12)
+        return value /(30*12)
 
     def max_yield_star(self):
         pass
@@ -172,14 +170,18 @@ class Household(Agent):
         return total_days / total_houses
 
     def max_yield(self):
-        exp_total_yield = (
-            price
-            * (
-                delta * expected_monthly_appreciation
-                + (1 - delta) * average_rental_yield
-            )
-            - monthly_mortgage
-        )
+        delta = 0.6
+        for house in self.model.sale_market:
+            price = self.get_price(house)
+            quality = house.quality
+            exp_total_yield = (price*( delta * expected_monthly_appreciation + (1 - delta) * self.average_rental_yield(quality, price)  - price / (30*12)))
+
+
+
+    def average_rental_yield(self, quality, price):
+        annual_rent = self.model.annual_rent(quality)
+        return annual_rent / price
+
 
     def average_sell_price(self):
         if len(self.model.prev_sale_prices) == 0:
@@ -293,8 +295,6 @@ class Household(Agent):
 
         self.model.prev_sale_prices[house.quality].append(sell_price)
 
-        # Change house status based on person who bought it!
-        # And remove it from sell market :)
         if self.type == "owner_occ":
             self.type = "social"
 
@@ -501,10 +501,7 @@ class Housemarket(Model):
                 elif house.location == "East" and house.size < 75:
                     house.quality = "D"
 
-        self.datacollector = DataCollector(
-            model_reporters={"avg": average_sale_price},
-            agent_reporters={"Wealth": "wealth"},
-        )
+        self.datacollector = DataCollector(model_reporters={"avg": average_sale_price}, agent_reporters={"Wealth": "wealth"})
 
     def step(self):
         self.datacollector.collect(self)
@@ -546,12 +543,12 @@ class Housemarket(Model):
                     counter += 1
 
         total_rent = total_rent * 12
+        
         if counter == 0:
             return 12000
         else:
             return total_rent / counter
-
-
+    
 def average_sale_price(model):
     total_price = 0
     total_sales = 0
@@ -559,7 +556,7 @@ def average_sale_price(model):
         total_price += prices
         total_sales += 1
     if total_sales != 0:
-        return total_price / total_sales
+        return total_price/total_sales
     else:
         return 0
 
@@ -605,6 +602,10 @@ if __name__ in "__main__":
     avg_sell_price = model.datacollector.get_model_vars_dataframe()
     agent_wealth = agent_wealth["Wealth"].dropna()
     print(avg_sell_price)
+
+    
+
+
 
     # grid = CanvasGrid(agent_portrayal, width, height, 500, 500)
     # chart = ChartModule([{"Label": "Average house prices", "Color" : "Black"}], data_collector_name='datacollector')
